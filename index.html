@@ -1,0 +1,1070 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#059669">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>PettyCash v1.7</title>
+    
+    <!-- Dynamic PWA Manifest & Icon Injection -->
+    <link id="pwa-manifest" rel="manifest" href="">
+    <link id="apple-touch-icon" rel="apple-touch-icon" href="">
+
+    <!-- Tailwind CSS for modern mobile-friendly UI -->
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <!-- SheetJS CDN for Excel (XLSX) generation -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+        /* Modern Clean Print Styling Fix */
+        @media print {
+            body { background: white; color: black; }
+            .no-print { display: none !important; }
+            #print-area { display: block !important; }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans min-h-screen pb-10">
+
+    <!-- Main App Container (Hidden during printing) -->
+    <div class="max-w-md mx-auto bg-white min-h-screen shadow-lg no-print flex flex-col">
+        
+        <!-- Header -->
+        <div class="bg-emerald-600 text-white p-4 flex justify-between items-center rounded-b-xl shadow-md sticky top-0 z-40">
+            <div>
+                <div class="flex items-center gap-2">
+                    <h1 class="text-xl font-bold">PettyCash v1.7</h1>
+                    <span class="bg-emerald-800 text-[10px] px-1.5 py-0.5 rounded font-semibold tracking-wider">PWA</span>
+                </div>
+                <p class="text-xs mt-0.5 opacity-90" id="header-dept-name">দপ্তর: সেট করুন</p>
+            </div>
+            <div class="flex items-center gap-1">
+                <button id="pwa-install-btn" onclick="installPWA()" class="hidden bg-white text-emerald-700 px-2.5 py-1 rounded-lg text-xs font-bold shadow hover:bg-gray-100 transition">
+                    📲 ইনস্টল
+                </button>
+                <button onclick="toggleSettings(true)" class="p-2 hover:bg-emerald-700 rounded-full transition text-xl" title="সেটিংস">
+                    ⚙️
+                </button>
+            </div>
+        </div>
+
+        <!-- Live Status Card (With Pending Cash Pipeline) -->
+        <div id="live-status-card" class="p-4 bg-gray-50 border-b border-gray-100 space-y-3 shadow-inner">
+            <div class="grid grid-cols-2 gap-3">
+                <div class="bg-white p-3 rounded-lg border border-gray-200 shadow-sm text-center">
+                    <p class="text-xs text-gray-500 font-medium">চলতি সাইকেলে খরচ</p>
+                    <p class="text-md font-bold text-gray-800">৳ <span id="stat-total-spent">0</span></p>
+                </div>
+                <div class="bg-white p-3 rounded-lg border border-gray-200 shadow-sm text-center flex flex-col justify-center items-center">
+                    <p class="text-xs text-gray-500 font-medium">বর্তমানে হাতে আছে</p>
+                    <p class="text-md font-black text-emerald-600">৳ <span id="stat-current-balance">0</span></p>
+                </div>
+            </div>
+            <!-- Pipeline Indicator Bar -->
+            <div id="pending-cash-alert" class="hidden bg-amber-50 border border-amber-200 rounded-lg p-2 flex justify-between items-center text-xs">
+                <span class="text-amber-800 font-medium">⏳ অফিসে বিল সাবমিট করা আছে (পেন্ডিং):</span>
+                <span class="font-bold text-amber-700">৳ <span id="stat-pending-balance">0</span></span>
+            </div>
+        </div>
+
+        <!-- Navigation Tabs -->
+        <div class="flex bg-gray-200 border-b border-gray-300 sticky top-[68px] z-30">
+            <button onclick="switchTab('entry')" id="tab-entry" class="flex-1 py-3 text-center text-sm font-bold border-b-2 border-emerald-600 text-emerald-600 bg-white transition">বিল এন্ট্রি</button>
+            <button onclick="switchTab('current')" id="tab-current" class="flex-1 py-3 text-center text-sm font-bold border-b-2 border-transparent text-gray-600 hover:bg-gray-50 transition">চলতি খরচ (<span id="current-count">0</span>)</button>
+            <button onclick="switchTab('archive')" id="tab-archive" class="flex-1 py-3 text-center text-sm font-bold border-b-2 border-transparent text-gray-600 hover:bg-gray-50 transition">আর্কাইভ (<span id="archive-count">0</span>)</button>
+        </div>
+
+        <!-- Tab Contents Container -->
+        <div class="p-4 flex-1 space-y-4">
+            
+            <!-- TAB 1: BILL ENTRY -->
+            <div id="view-entry" class="space-y-4">
+                <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm space-y-3">
+                    <h3 class="text-sm font-bold text-gray-700 border-b pb-2 flex items-center gap-2" id="entry-form-title">➕ নতুন বিল এন্ট্রি</h3>
+                    <input type="hidden" id="edit-mode-id" value="">
+                    
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600">তারিখ</label>
+                        <input type="date" id="exp-date" class="w-full p-2 border rounded text-sm mt-1">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600">খরচের বিবরণ</label>
+                        <input type="text" id="exp-desc" placeholder="উদা: মেহমান আপ্যায়ন, চিঠি পাঠানো" class="w-full p-2 border rounded text-sm mt-1">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600">খরচের খাত</label>
+                        <select id="exp-sector" class="w-full p-2 border rounded text-sm mt-1">
+                            <!-- Dynamic Sectors -->
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600">মোট খরচ (৳)</label>
+                        <input type="number" id="exp-total-input" value="0" min="0" onfocus="clearZero(this)" onblur="restoreZero(this)" class="w-full p-2 border rounded font-bold text-gray-800 text-base mt-1">
+                    </div>
+
+                    <div class="flex items-center gap-2 py-1">
+                        <input type="checkbox" id="has-travel" onchange="toggleTravelInput()" class="w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500">
+                        <label for="has-travel" class="text-xs font-bold text-gray-700 cursor-pointer">যাতায়াত অন্তর্ভুক্ত?</label>
+                    </div>
+
+                    <div id="travel-input-zone" class="hidden bg-gray-50 p-2.5 rounded-lg border border-gray-100">
+                        <label class="block text-xs font-semibold text-gray-600">এর মধ্যে যাতায়াত খরচ কত? (৳)</label>
+                        <input type="number" id="exp-travel-input" value="0" min="0" onfocus="clearZero(this)" onblur="restoreZero(this)" class="w-full p-2 border rounded text-sm mt-1 text-red-600 font-bold">
+                    </div>
+
+                    <div class="flex gap-2">
+                        <button id="cancel-edit-btn" onclick="exitEditMode()" class="flex-1 bg-gray-400 text-white p-2.5 rounded-lg font-bold hover:bg-gray-500 transition hidden">বাতিল</button>
+                        <button id="submit-entry-btn" onclick="addExpense()" class="flex-[2] bg-emerald-600 text-white p-2.5 rounded-lg font-bold hover:bg-emerald-700 transition">খরচ যুক্ত করুন</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 2: CURRENT EXPENSES -->
+            <div id="view-current" class="hidden space-y-4">
+                <div id="submit-bill-zone" class="hidden bg-gray-50 p-3 rounded-xl border border-gray-200 shadow-sm space-y-2">
+                    <button onclick="generatePrintPreviewOnly()" class="w-full bg-blue-600 text-white p-2.5 rounded-xl font-bold text-sm shadow hover:bg-blue-700 transition flex justify-center items-center gap-2">
+                        📄 বিলের খসড়া পিডিএফ/প্রিন্ট দেখুন
+                    </button>
+                    <button onclick="exportToExcel()" class="w-full bg-teal-600 text-white p-2.5 rounded-xl font-bold text-sm shadow hover:bg-teal-700 transition flex justify-center items-center gap-2">
+                        📊 বিলের এক্সেল (XLSX) ফাইল ডাউনলোড
+                    </button>
+                    <button onclick="finalSubmitWithPipeline()" class="w-full bg-red-600 text-white p-2.5 rounded-xl font-bold text-sm shadow hover:bg-red-700 transition flex justify-center items-center gap-2">
+                        📥 বিল ফাইনাল সাবমিট করুন (পেন্ডিং ক্যাশ)
+                    </button>
+                    <p class="text-[9px] text-center text-gray-500 font-medium leading-tight">বিলটি সাবমিট করলে এটি আর্কাইভ ট্যাবে "পেন্ডিং" হিসেবে জমা হবে এবং আপনার হাতের ক্যাশ থেকে সাময়িক মাইনাস থাকবে।</p>
+                </div>
+
+                <div class="space-y-2">
+                    <h3 class="text-sm font-bold text-gray-700">📋 চলতি সাইকেলের খরচের তালিকা</h3>
+                    <div id="current-expense-list" class="space-y-2">
+                        <!-- Dynamic list -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 3: ARCHIVE (With Search Bar) -->
+            <div id="view-archive" class="hidden space-y-4">
+                <div class="flex justify-between items-center border-b pb-2">
+                    <h3 class="text-sm font-bold text-gray-700">📜 সাবমিটকৃত বিলসমূহের আর্কাইভ</h3>
+                    <button onclick="clearAllData()" class="text-xs text-red-500 font-semibold hover:underline">সব ডেটা মুছুন</button>
+                </div>
+
+                <!-- Smart Search Input -->
+                <div class="relative">
+                    <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400 text-sm">🔍</span>
+                    <input type="text" id="archive-search-input" onkeyup="renderArchiveUI()" placeholder="বিবরণ, খাত, টাকার পরিমাণ বা তারিখ দিয়ে খুঁজুন..." class="w-full pl-9 pr-8 py-2 border border-gray-300 rounded-lg text-xs focus:outline-none focus:border-emerald-500 bg-gray-50 focus:bg-white transition">
+                    <button id="clear-search-btn" onclick="clearArchiveSearch()" class="hidden absolute inset-y-0 right-0 flex items-center pr-2.5 text-gray-400 hover:text-gray-600 font-bold text-sm">×</button>
+                </div>
+
+                <div id="archive-list" class="space-y-3">
+                    <!-- Dynamic Archive list -->
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- SETTINGS MODAL DIALOG -->
+    <div id="settings-modal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 hidden no-print">
+        <div class="bg-white rounded-xl max-w-sm w-full p-5 max-h-[90vh] overflow-y-auto space-y-4 shadow-2xl relative">
+            <button onclick="toggleSettings(false)" class="absolute top-3 right-3 text-gray-400 hover:text-gray-600 font-bold text-xl">×</button>
+            <h2 class="text-md font-bold text-gray-800 border-b pb-2 flex items-center gap-1">⚙️ অ্যাপ সেটিংস প্যানেল</h2>
+            
+            <div class="space-y-2">
+                <label class="block text-xs font-bold text-gray-600">অফিস প্রোফাইল (নাম, পদবী কমা দিয়ে লিখুন)</label>
+                <input type="text" id="set-dept-name" placeholder="দপ্তরের নাম" class="w-full p-2 border rounded text-sm">
+                <input type="text" id="set-creator-name" placeholder="প্রস্তুতকারী: নাম, পদবী" class="w-full p-2 border rounded text-sm">
+                <input type="text" id="set-recommender-name" placeholder="সুপারিশকারী: নাম, পদবী" class="w-full p-2 border rounded text-sm">
+            </div>
+
+            <div class="bg-emerald-50 p-3 rounded-lg border border-emerald-200 space-y-2">
+                <label class="block text-xs font-bold text-emerald-800">ওপেনিং রিভলভিং ব্যালেন্স (অগ্রীম টাকা)</label>
+                <div class="flex gap-2">
+                    <input type="number" id="set-opening-balance" value="5000" class="w-full p-2 border rounded font-bold text-emerald-700 text-sm bg-white">
+                    <button id="lock-btn" onclick="toggleBalanceLock()" class="bg-emerald-600 text-white px-3 rounded font-semibold text-xs hover:bg-emerald-700">লক করুন</button>
+                </div>
+            </div>
+
+            <div class="space-y-2">
+                <label class="block text-xs font-bold text-gray-600">খরচের খাত ব্যবস্থাপনা</label>
+                <div class="flex gap-1">
+                    <input type="text" id="new-sector-input" placeholder="নতুন খাতের নাম" class="w-full p-2 border rounded text-sm">
+                    <button onclick="addNewSector()" class="bg-gray-800 text-white px-3 rounded font-bold text-sm hover:bg-gray-900">+</button>
+                </div>
+                <div id="settings-sectors-list" class="flex flex-wrap gap-1.5 pt-1">
+                    <!-- Dynamic categories tags -->
+                </div>
+            </div>
+
+            <!-- BACKUP & RESTORE SECTION -->
+            <div class="bg-blue-50 p-3 rounded-lg border border-blue-200 space-y-2.5">
+                <label class="block text-xs font-bold text-blue-800">💾 ডাটা ব্যাকআপ ও রিস্টোর</label>
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="exportBackupData()" class="bg-blue-600 text-white py-1.5 px-2 rounded font-bold text-xs hover:bg-blue-700 transition">
+                        📥 ব্যাকআপ ফাইল ডাউনলোড
+                    </button>
+                    <label class="bg-gray-800 text-white py-1.5 px-2 rounded font-bold text-xs text-center hover:bg-gray-900 transition cursor-pointer">
+                        📤 ফাইল ইমপোর্ট করুন
+                        <input type="file" id="import-file-input" accept=".json" onchange="importBackupData(event)" class="hidden">
+                    </label>
+                </div>
+            </div>
+
+            <button onclick="saveAllSettings()" class="w-full bg-emerald-600 text-white p-2.5 rounded-lg text-sm font-bold shadow hover:bg-emerald-700 transition">সব সংরক্ষণ করুন</button>
+        </div>
+    </div>
+
+    <!-- PRINT TEMPLATE (Fixed Travel Column Overlap) -->
+    <div id="print-area" class="hidden p-8 bg-white text-black text-sm leading-relaxed">
+        
+        <!-- Top Summary Section & Date -->
+        <div class="flex justify-between items-start mb-4">
+            <div class="w-52">
+                <table class="w-full border-collapse border border-black text-[11px] leading-tight text-center">
+                    <thead>
+                        <tr class="bg-gray-100 font-bold">
+                            <th class="border border-black px-2 py-1 w-2/3">খাতের নাম</th>
+                            <th class="border border-black px-2 py-1 w-1/3">মোট খরচ</th>
+                        </tr>
+                    </thead>
+                    <tbody id="print-summary-body">
+                        <!-- Dynamic Sector Breakdown Summaries -->
+                    </tbody>
+                </table>
+            </div>
+            <div class="text-right text-xs pt-1">
+                <p><strong>তারিখ:</strong> <span id="p-submit-date">........</span></p>
+            </div>
+        </div>
+
+        <!-- Top Main Heading Area -->
+        <div class="text-center mb-4">
+            <h2 class="font-bold text-base"><span id="p-top-dept">..........</span> দপ্তরের নৈমিত্তিক খরচ</h2>
+            <p class="text-xs font-medium mt-0.5">(<span id="p-start-date">....</span> থেকে <span id="p-end-date">........</span>)</p>
+        </div>
+
+        <!-- Main Expense Table (Travel Column Width & Font Optimized) -->
+        <table class="w-full border-collapse border border-black text-left my-3 text-xs table-fixed">
+            <thead>
+                <tr class="bg-gray-100 text-center font-bold">
+                    <th class="border border-black p-1.5 w-[5%]">ক্রম.</th>
+                    <th class="border border-black p-1.5 w-[10%]">তারিখ</th>
+                    <th class="border border-black p-1.5 w-[45.5%]">বিবরণ</th>
+                    <th class="border border-black p-1.5 w-[13%]">খরচের খাত</th>
+                    <th class="border border-black px-1 py-1.5 text-center w-[8.5%] text-[11px] leading-tight">যাতায়াত<br><span class="font-normal text-[10px] text-gray-700">(৳)</span></th>
+                    <th class="border border-black p-1.5 text-center w-[9%]">মূল খরচ<br><span class="font-normal text-[10px] text-gray-700">(৳)</span></th>
+                    <th class="border border-black p-1.5 text-center w-[9%]">মোট খরচ<br><span class="font-normal text-[10px] text-gray-700">(৳)</span></th>
+                </tr>
+            </thead>
+            <tbody id="print-table-body">
+                <!-- Print Dynamic Rows -->
+            </tbody>
+            <tfoot>
+                <tr class="font-bold bg-gray-50">
+                    <td colspan="4" class="border border-black p-1.5 text-right">যোগফল:</td>
+                    <td id="p-total-travel" class="border border-black p-1.5 text-right pr-1">০/-</td>
+                    <td id="p-total-main" class="border border-black p-1.5 text-right pr-1">০/-</td>
+                    <td id="p-grand-total" class="border border-black p-1.5 text-right pr-1">০/-</td>
+                </tr>
+            </tfoot>
+        </table>
+
+        <!-- Bengali Words Amount Row -->
+        <p class="font-bold my-3 text-xs">কথায় (টাকায়): <span id="p-words" class="underline">...............</span> মাত্র।</p>
+
+        <!-- Dynamic Official Structure Placement -->
+        <div class="mt-10 grid grid-cols-12 gap-2 text-xs items-start">
+            <div class="col-span-6 text-left space-y-4">
+                <div>
+                    <p class="text-gray-700 text-[12px] font-medium italic mb-1">সদয় অনুমোদনের জন্য উপস্থাপন করা হলো।</p>
+                    <p class="font-bold text-[13px]"><u>মোহতরম ন্যাশনাল আমীর সাহেব সমীপে</u></p>
+                </div>
+            </div>
+            <div class="col-span-3 text-center pt-6">
+                <div class="border-t border-black pt-1 min-h-[40px]">
+                    <p class="font-bold mb-0.5 text-gray-900">সুপারিশকারী</p>
+                    <div id="p-recommender-profile" class="text-[11px] leading-tight text-gray-800"></div>
+                </div>
+            </div>
+            <div class="col-span-3 text-center pt-6">
+                <div class="border-t border-black pt-1 min-h-[40px]">
+                    <p class="font-bold mb-0.5 text-gray-900">প্রস্তুতকারী</p>
+                    <div id="p-creator-profile" class="text-[11px] leading-tight text-gray-800"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript Application Logic -->
+    <script>
+        // ==========================================
+        // PWA CONFIGURATION (Manifest & Service Worker)
+        // ==========================================
+        (function setupPWA() {
+            // Generate clean SVG App Icon dynamically
+            const iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="100" fill="#059669"/><text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-weight="bold" font-size="260" fill="#ffffff">৳</text></svg>`;
+            const iconUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(iconSvg)));
+            document.getElementById('apple-touch-icon').href = iconUrl;
+
+            // Create Web App Manifest dynamically
+            const manifest = {
+                name: "PettyCash v1.7 - অফিস হিসাব ব্যবস্থাপনা",
+                short_name: "PettyCash",
+                description: "দপ্তরের নৈমিত্তিক খরচ ও রিভলভিং ফান্ড ম্যানেজমেন্ট অ্যাপ",
+                start_url: window.location.href,
+                display: "standalone",
+                background_color: "#f3f4f6",
+                theme_color: "#059669",
+                icons: [
+                    { src: iconUrl, sizes: "192x192", type: "image/svg+xml" },
+                    { src: iconUrl, sizes: "512x512", type: "image/svg+xml" }
+                ]
+            };
+            const manifestBlob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
+            document.getElementById('pwa-manifest').href = URL.createObjectURL(manifestBlob);
+
+            // Register Service Worker for Offline Caching
+            if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.hostname === 'localhost')) {
+                const swCode = `
+                    const CACHE_NAME = 'pettycash-v1.7-cache';
+                    self.addEventListener('install', (e) => {
+                        self.skipWaiting();
+                    });
+                    self.addEventListener('activate', (e) => {
+                        e.waitUntil(clients.claim());
+                    });
+                    self.addEventListener('fetch', (e) => {
+                        e.respondWith(
+                            fetch(e.request).then((res) => {
+                                const resClone = res.clone();
+                                caches.open(CACHE_NAME).then((cache) => {
+                                    if(e.request.method === 'GET') cache.put(e.request, resClone);
+                                });
+                                return res;
+                            }).catch(() => caches.match(e.request))
+                        );
+                    });
+                `;
+                const swBlob = new Blob([swCode], { type: 'application/javascript' });
+                navigator.serviceWorker.register(URL.createObjectURL(swBlob)).catch(() => {});
+            }
+        })();
+
+        // PWA Install Prompt Handler
+        let deferredPrompt;
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            document.getElementById('pwa-install-btn').classList.remove('hidden');
+        });
+
+        async function installPWA() {
+            if (!deferredPrompt) return;
+            deferredPrompt.prompt();
+            const { outcome } = await deferredPrompt.userChoice;
+            if (outcome === 'accepted') {
+                document.getElementById('pwa-install-btn').classList.add('hidden');
+            }
+            deferredPrompt = null;
+        }
+
+        // ==========================================
+        // CORE APPLICATION STATE & LOGIC
+        // ==========================================
+        let state = {
+            openingBalance: 5000,
+            isLocked: true,
+            currentExpenses: [],
+            archive: [], 
+            profile: { dept: '', creator: '', recommender: '' },
+            sectors: ["অফিস আপ্যায়ন", "যাতায়াত", "ফোন বিল", "কুরিয়ার", "স্টেশনারী"]
+        };
+
+        if(localStorage.getItem('pettyCashV6Data')) {
+            state = JSON.parse(localStorage.getItem('pettyCashV6Data'));
+        }
+
+        document.addEventListener("DOMContentLoaded", () => {
+            resetDateInput();
+            loadSettingsInputs();
+            renderSectors();
+            updateUI();
+        });
+
+        function saveToLocalStorage() {
+            localStorage.setItem('pettyCashV6Data', JSON.stringify(state));
+        }
+
+        function clearZero(input) {
+            if (input.value === '0') input.value = '';
+        }
+        function restoreZero(input) {
+            if (input.value === '') input.value = '0';
+        }
+
+        function resetDateInput() {
+            document.getElementById('exp-date').valueAsDate = new Date();
+        }
+
+        function toggleTravelInput() {
+            const checkBox = document.getElementById('has-travel');
+            const travelZone = document.getElementById('travel-input-zone');
+            const travelInput = document.getElementById('exp-travel-input');
+            
+            if(checkBox.checked) {
+                travelZone.classList.remove('hidden');
+            } else {
+                travelZone.classList.add('hidden');
+                travelInput.value = '0';
+            }
+        }
+
+        function switchTab(tab) {
+            document.getElementById('view-entry').classList.add('hidden');
+            document.getElementById('view-current').classList.add('hidden');
+            document.getElementById('view-archive').classList.add('hidden');
+            
+            document.getElementById('tab-entry').className = "flex-1 py-3 text-center text-sm font-bold border-b-2 border-transparent text-gray-600 hover:bg-gray-50 transition";
+            document.getElementById('tab-current').className = "flex-1 py-3 text-center text-sm font-bold border-b-2 border-transparent text-gray-600 hover:bg-gray-50 transition";
+            document.getElementById('tab-archive').className = "flex-1 py-3 text-center text-sm font-bold border-b-2 border-transparent text-gray-600 hover:bg-gray-50 transition";
+            
+            if(tab === 'entry') {
+                document.getElementById('view-entry').classList.remove('hidden');
+                document.getElementById('tab-entry').className = "flex-1 py-3 text-center text-sm font-bold border-b-2 border-emerald-600 text-emerald-600 bg-white transition";
+            } else if (tab === 'current') {
+                document.getElementById('view-current').classList.remove('hidden');
+                document.getElementById('tab-current').className = "flex-1 py-3 text-center text-sm font-bold border-b-2 border-emerald-600 text-emerald-600 bg-white transition";
+            } else if (tab === 'archive') {
+                document.getElementById('view-archive').classList.remove('hidden');
+                document.getElementById('tab-archive').className = "flex-1 py-3 text-center text-sm font-bold border-b-2 border-emerald-600 text-emerald-600 bg-white transition";
+            }
+        }
+
+        function toggleSettings(show) {
+            const modal = document.getElementById('settings-modal');
+            if(show) {
+                loadSettingsInputs();
+                renderSettingsSectors();
+                modal.classList.remove('hidden');
+            } else {
+                modal.classList.add('hidden');
+            }
+        }
+
+        function loadSettingsInputs() {
+            document.getElementById('set-dept-name').value = state.profile.dept || '';
+            document.getElementById('set-creator-name').value = state.profile.creator || '';
+            document.getElementById('set-recommender-name').value = state.profile.recommender || '';
+            document.getElementById('set-opening-balance').value = state.openingBalance;
+            
+            const balInput = document.getElementById('set-opening-balance');
+            const lockBtn = document.getElementById('lock-btn');
+            if(state.isLocked) {
+                balInput.disabled = true;
+                lockBtn.innerText = "আনলক করুন";
+                lockBtn.className = "bg-gray-500 text-white px-3 rounded font-semibold text-xs hover:bg-gray-600";
+            } else {
+                balInput.disabled = false;
+                lockBtn.innerText = "লক করুন";
+                lockBtn.className = "bg-emerald-600 text-white px-3 rounded font-semibold text-xs hover:bg-emerald-700";
+            }
+        }
+
+        function toggleBalanceLock() {
+            state.isLocked = !state.isLocked;
+            if(state.isLocked) {
+                state.openingBalance = parseFloat(document.getElementById('set-opening-balance').value) || 5000;
+            }
+            saveToLocalStorage();
+            loadSettingsInputs();
+            updateUI();
+        }
+
+        function addNewSector() {
+            const input = document.getElementById('new-sector-input');
+            const val = input.value.trim();
+            if(!val) return alert("খাতের নাম খালি রাখা যাবে না!");
+            if(state.sectors.includes(val)) return alert("এই খাতটি অলরেডি আছে!");
+            state.sectors.push(val);
+            input.value = '';
+            saveToLocalStorage();
+            renderSettingsSectors();
+            renderSectors();
+        }
+
+        function removeSector(sectorName) {
+            state.sectors = state.sectors.filter(s => s !== sectorName);
+            saveToLocalStorage();
+            renderSettingsSectors();
+            renderSectors();
+        }
+
+        function renderSettingsSectors() {
+            const container = document.getElementById('settings-sectors-list');
+            container.innerHTML = '';
+            state.sectors.forEach(s => {
+                const span = document.createElement('span');
+                span.className = "bg-gray-100 text-gray-800 text-xs px-2 py-1 rounded border flex items-center gap-1 font-medium";
+                span.innerHTML = `${s} <button onclick="removeSector('${s}')" class="text-red-500 font-bold hover:text-red-700 ml-0.5">×</button>`;
+                container.appendChild(span);
+            });
+        }
+
+        function renderSectors() {
+            const select = document.getElementById('exp-sector');
+            select.innerHTML = '';
+            state.sectors.forEach(s => {
+                const opt = document.createElement('option');
+                opt.value = s;
+                opt.innerText = s;
+                select.appendChild(opt);
+            });
+        }
+
+        function saveAllSettings() {
+            state.profile.dept = document.getElementById('set-dept-name').value.trim();
+            state.profile.creator = document.getElementById('set-creator-name').value.trim();
+            state.profile.recommender = document.getElementById('set-recommender-name').value.trim();
+            if(!state.isLocked) {
+                state.openingBalance = parseFloat(document.getElementById('set-opening-balance').value) || 5000;
+            }
+            saveToLocalStorage();
+            toggleSettings(false);
+            updateUI();
+        }
+
+        function exportBackupData() {
+            try {
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state, null, 2));
+                const downloadAnchor = document.createElement('a');
+                const today = new Date();
+                const dateStr = today.getFullYear() + '-' + (today.getMonth()+1).toString().padStart(2, '0') + '-' + today.getDate().toString().padStart(2, '0');
+                downloadAnchor.setAttribute("href", dataStr);
+                downloadAnchor.setAttribute("download", `PettyCash_Backup_${dateStr}.json`);
+                document.body.appendChild(downloadAnchor);
+                downloadAnchor.click();
+                downloadAnchor.remove();
+            } catch (error) {
+                alert("ব্যাকআপ তৈরি করতে সমস্যা হয়েছে: " + error.message);
+            }
+        }
+
+        function importBackupData(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const importedState = JSON.parse(e.target.result);
+                    if (importedState && typeof importedState === 'object' && 'currentExpenses' in importedState) {
+                        if (confirm("⚠️ বর্তমান ডেটা রিপ্লেস হয়ে যাবে। আপনি কি নিশ্চিত?")) {
+                            state = importedState;
+                            saveToLocalStorage();
+                            alert("✅ সফলভাবে ডাটা ইমপোর্ট সম্পন্ন হয়েছে!");
+                            location.reload();
+                        }
+                    }
+                } catch (err) { alert("❌ ভুল ফাইল ফরম্যাট!"); }
+            };
+            reader.readAsText(file);
+        }
+
+        function addExpense() {
+            const date = document.getElementById('exp-date').value;
+            const desc = document.getElementById('exp-desc').value.trim();
+            const sector = document.getElementById('exp-sector').value;
+            const totalBillInput = parseFloat(document.getElementById('exp-total-input').value) || 0;
+            const hasTravelChecked = document.getElementById('has-travel').checked;
+            const travelBillInput = hasTravelChecked ? (parseFloat(document.getElementById('exp-travel-input').value) || 0) : 0;
+            const editModeId = document.getElementById('edit-mode-id').value;
+
+            if(!desc) return alert("খরচের বিবরণ লিখুন!");
+            if(totalBillInput <= 0) return alert("মোট খরচের সঠিক পরিমাণ লিখুন!");
+            if(hasTravelChecked && travelBillInput > totalBillInput) {
+                return alert("যাতায়াত খরচ মোট খরচের চেয়ে বেশি হতে পারে না!");
+            }
+
+            const travelCost = travelBillInput;
+            const mainCost = totalBillInput - travelBillInput;
+
+            if(editModeId) {
+                const idx = state.currentExpenses.findIndex(e => e.id == editModeId);
+                if(idx !== -1) {
+                    state.currentExpenses[idx].rawDate = date; 
+                    state.currentExpenses[idx].date = convertToBanglaDate(formatDate(date));
+                    state.currentExpenses[idx].desc = desc;
+                    state.currentExpenses[idx].sector = sector;
+                    state.currentExpenses[idx].travel = travelCost;
+                    state.currentExpenses[idx].main = mainCost;
+                    state.currentExpenses[idx].total = totalBillInput;
+                }
+                exitEditMode();
+            } else {
+                state.currentExpenses.push({
+                    id: Date.now(),
+                    rawDate: date,
+                    date: convertToBanglaDate(formatDate(date)),
+                    desc,
+                    sector,
+                    travel: travelCost,
+                    main: mainCost,
+                    total: totalBillInput
+                });
+            }
+
+            document.getElementById('exp-desc').value = '';
+            document.getElementById('exp-total-input').value = '0';
+            document.getElementById('exp-travel-input').value = '0';
+            document.getElementById('has-travel').checked = false;
+            toggleTravelInput();
+            resetDateInput();
+            saveToLocalStorage();
+            updateUI();
+        }
+
+        function editExpense(id) {
+            const item = state.currentExpenses.find(e => e.id == id);
+            if(!item) return;
+
+            switchTab('entry'); 
+            document.getElementById('entry-form-title').innerText = "✏️ বিল সংশোধন করুন";
+            document.getElementById('edit-mode-id').value = item.id;
+            document.getElementById('exp-desc').value = item.desc;
+            document.getElementById('exp-sector').value = item.sector;
+            document.getElementById('exp-total-input').value = item.total;
+            
+            if(item.rawDate) document.getElementById('exp-date').value = item.rawDate;
+            
+            if(item.travel > 0) {
+                document.getElementById('has-travel').checked = true;
+                toggleTravelInput();
+                document.getElementById('exp-travel-input').value = item.travel;
+            } else {
+                document.getElementById('has-travel').checked = false;
+                toggleTravelInput();
+            }
+
+            document.getElementById('cancel-edit-btn').classList.remove('hidden');
+            document.getElementById('submit-entry-btn').innerText = "আপডেট করুন";
+        }
+
+        function exitEditMode() {
+            document.getElementById('entry-form-title').innerText = "➕ নতুন বিল এন্ট্রি";
+            document.getElementById('edit-mode-id').value = '';
+            document.getElementById('cancel-edit-btn').classList.add('hidden');
+            document.getElementById('submit-entry-btn').innerText = "খরচ যুক্ত করুন";
+            resetDateInput();
+        }
+
+        function deleteCurrentExpense(id) {
+            if(confirm("খরচটি মুছে ফেলতে চান?")) {
+                state.currentExpenses = state.currentExpenses.filter(e => e.id !== id);
+                saveToLocalStorage();
+                updateUI();
+            }
+        }
+
+        function updateUI() {
+            document.getElementById('header-dept-name').innerText = state.profile.dept ? `দপ্তর: ${state.profile.dept}` : "দপ্তর: সেট করুন";
+            
+            let currentCycleSpent = 0;
+            const currentList = document.getElementById('current-expense-list');
+            currentList.innerHTML = '';
+
+            state.currentExpenses.forEach((item, idx) => {
+                currentCycleSpent += item.total;
+                const card = document.createElement('div');
+                card.className = "bg-white p-3 rounded-lg border border-gray-200 shadow-sm flex justify-between items-center text-xs";
+                card.innerHTML = `
+                    <div class="flex-1 pr-2">
+                        <p class="font-bold text-gray-800">${idx+1}. ${item.desc} [${item.sector}]</p>
+                        <p class="text-gray-400 font-medium">${item.date} | মূল: ৳${item.main} ${item.travel ? '| যাতায়াত: ৳'+item.travel : ''} | <strong>মোট: ৳${item.total}</strong></p>
+                    </div>
+                    <div class="flex gap-1.5 shrink-0">
+                        <button onclick="editExpense(${item.id})" class="text-orange-500 font-medium bg-orange-50 px-2 py-1 rounded border hover:bg-orange-100">এডিট ✏️</button>
+                        <button onclick="deleteCurrentExpense(${item.id})" class="text-red-500 font-bold bg-red-50 px-2.5 py-1 rounded border hover:bg-red-100">×</button>
+                    </div>
+                `;
+                currentList.appendChild(card);
+            });
+
+            if(state.currentExpenses.length === 0) {
+                currentList.innerHTML = `<p class="text-xs text-center text-gray-400 py-6">চলতি সাইকেলে কোনো খরচ নেই।</p>`;
+            }
+
+            let totalPendingCash = 0;
+            if(state.archive) {
+                state.archive.forEach(item => {
+                    if(item.status === 'pending') {
+                        totalPendingCash += item.grandTotal;
+                    }
+                });
+            }
+
+            const liquidCashInHand = state.openingBalance - currentCycleSpent - totalPendingCash;
+
+            document.getElementById('current-count').innerText = state.currentExpenses.length;
+            document.getElementById('archive-count').innerText = state.archive ? state.archive.length : 0;
+            
+            document.getElementById('stat-total-spent').innerText = currentCycleSpent;
+            document.getElementById('stat-current-balance').innerText = liquidCashInHand;
+
+            const pendingZone = document.getElementById('pending-cash-alert');
+            if(totalPendingCash > 0) {
+                pendingZone.classList.remove('hidden');
+                document.getElementById('stat-pending-balance').innerText = totalPendingCash;
+            } else {
+                pendingZone.classList.add('hidden');
+            }
+
+            document.getElementById('submit-bill-zone').className = state.currentExpenses.length > 0 ? "bg-gray-50 p-3 rounded-xl border border-gray-200 shadow-sm space-y-2" : "hidden";
+            renderArchiveUI();
+        }
+
+        // Convert Bangla digits to English digits for seamless numeric searching
+        function normalizeDigits(str) {
+            if (!str) return '';
+            const banglaToEng = {'০': '0', '১': '1', '২': '2', '৩': '3', '৪': '4', '৫': '5', '৬': '6', '৭': '7', '৮': '8', '৯': '9'};
+            return str.toString().replace(/[০-৯]/g, d => banglaToEng[d]).toLowerCase();
+        }
+
+        function clearArchiveSearch() {
+            document.getElementById('archive-search-input').value = '';
+            renderArchiveUI();
+        }
+
+        function renderArchiveUI() {
+            const container = document.getElementById('archive-list');
+            const searchInput = document.getElementById('archive-search-input');
+            const clearBtn = document.getElementById('clear-search-btn');
+            const rawQuery = searchInput ? searchInput.value.trim() : '';
+            const query = normalizeDigits(rawQuery);
+
+            if (clearBtn) {
+                if (rawQuery.length > 0) clearBtn.classList.remove('hidden');
+                else clearBtn.classList.add('hidden');
+            }
+
+            container.innerHTML = '';
+            if(!state.archive || state.archive.length === 0) {
+                container.innerHTML = `<p class="text-xs text-center text-gray-400 py-6">আর্কাইভে কোনো রেকর্ড নেই।</p>`;
+                return;
+            }
+
+            let matchFound = 0;
+
+            state.archive.forEach((item, idx) => {
+                // Search Filtering Logic (Checks Bill Number, Dates, Total Amount, Voucher Descriptions, Sectors, Voucher Amounts)
+                if (query) {
+                    const billNumberStr = normalizeDigits((state.archive.length - idx).toString());
+                    const startDateStr = normalizeDigits(item.startDate);
+                    const endDateStr = normalizeDigits(item.endDate);
+                    const submitDateStr = normalizeDigits(item.submitDate);
+                    const grandTotalStr = normalizeDigits(item.grandTotal.toString());
+                    
+                    let voucherMatch = false;
+                    if (item.vouchers && Array.isArray(item.vouchers)) {
+                        voucherMatch = item.vouchers.some(v => 
+                            normalizeDigits(v.desc).includes(query) ||
+                            normalizeDigits(v.sector).includes(query) ||
+                            normalizeDigits(v.date).includes(query) ||
+                            normalizeDigits(v.total.toString()).includes(query)
+                        );
+                    }
+
+                    const isMatch = billNumberStr.includes(query) ||
+                                    startDateStr.includes(query) ||
+                                    endDateStr.includes(query) ||
+                                    submitDateStr.includes(query) ||
+                                    grandTotalStr.includes(query) ||
+                                    voucherMatch;
+
+                    if (!isMatch) return;
+                }
+
+                matchFound++;
+                const isPending = item.status === 'pending';
+                const div = document.createElement('div');
+                div.className = `border p-3 rounded-xl shadow-sm space-y-2.5 text-xs ${isPending ? 'bg-amber-50/70 border-amber-200' : 'bg-white border-gray-200'}`;
+                
+                let badgeHTML = isPending 
+                    ? `<span class="bg-amber-600 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow-sm">⏳ অফিসে লকিং (পেন্ডিং)</span>`
+                    : `<span class="bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow-sm">✅ ক্যাশ কালেক্টেড</span>`;
+
+                let pipelineActionBtn = isPending
+                    ? `<button onclick="markAsCashCollected(${idx})" class="flex-1 bg-emerald-600 text-white text-center py-1.5 rounded font-bold hover:bg-emerald-700 transition shadow">💰 টাকা ক্যাশ হয়েছে</button>`
+                    : ``;
+
+                div.innerHTML = `
+                    <div class="flex justify-between items-center font-bold text-gray-700 border-b pb-1.5">
+                        <div class="flex flex-col gap-0.5">
+                            <span>📦 বিল রেকর্ড #${state.archive.length - idx}</span>
+                            <span class="text-gray-400 font-normal text-[10px]">সময়কাল: ${item.startDate} থেকে ${item.endDate}</span>
+                        </div>
+                        <div class="text-right flex flex-col items-end gap-1">
+                            <span class="text-gray-800 text-sm">৳${convertToBanglaNumber(item.grandTotal)}/-</span>
+                            ${badgeHTML}
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="reprintArchiveReport(${idx})" class="flex-1 bg-gray-800 text-white text-center py-1.5 rounded font-bold hover:bg-gray-900 transition">👁️ পিডিএফ রিপোর্ট</button>
+                        ${pipelineActionBtn}
+                        <button onclick="deleteArchiveRecord(${idx})" class="text-red-500 font-bold bg-red-50 border border-red-100 px-3 rounded hover:bg-red-100 transition" title="মুছে ফেলুন">×</button>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+
+            if (matchFound === 0) {
+                container.innerHTML = `<p class="text-xs text-center text-gray-400 py-6">"${rawQuery}" সম্পর্কিত কোনো বিল পাওয়া যায়নি।</p>`;
+            }
+        }
+
+        function markAsCashCollected(idx) {
+            if(confirm("অফিস থেকে এই বিলের টাকা কি ক্যাশ হাতে পেয়েছেন? নিশ্চিত করলে এটি ফান্ডের ব্যালেন্সে যোগ হয়ে যাবে।")) {
+                state.archive[idx].status = 'collected';
+                saveToLocalStorage();
+                updateUI();
+            }
+        }
+
+        function deleteArchiveRecord(idx) {
+            if(confirm("আর্কাইভের এই বিলটি স্থায়ীভাবে মুছে ফেলতে চান? (সতর্কতা: এটি পেন্ডিং থাকলে ক্যাশ ব্যালেন্সে প্রভাব ফেলবে)")) {
+                state.archive.splice(idx, 1);
+                saveToLocalStorage();
+                updateUI();
+            }
+        }
+
+        function formatOfficialDesignation(profileString) {
+            if(!profileString) return '<p class="text-gray-400 font-normal">..................</p>';
+            const parts = profileString.split(',');
+            return `<p class="font-medium text-black mt-1">${parts[0]||''}</p><p class="text-gray-600 text-[10px] mt-0.5">${parts[1]||''}</p>`;
+        }
+
+        function convertToBanglaNumber(num) {
+            const banglaDigits = {'0': '০', '1': '১', '2': '২', '3': '৩', '4': '৪', '5': '৫', '6': '৬', '7': '৭', '8': '৮', '9': '৯'};
+            return num.toString().replace(/[0-9]/g, digit => banglaDigits[digit]);
+        }
+        function convertToBanglaDate(engDateStr) { return convertToBanglaNumber(engDateStr); }
+
+        function convertToBanglaWords(amount) {
+            amount = Math.floor(amount);
+            if (amount === 0) return "শূন্য";
+
+            const singleDigits = ["", "এক", "দুই", "তিন", "চার", "পাঁচ", "ছয়", "সাত", "আট", "নয়"];
+            const teensAndTens = ["দশ", "এগারো", "বারো", "তেরো", "চৌদ্দ", "পনেরো", "ষোলো", "সতেরো", "আঠারো", "উনিশ", "বিশ", 
+                                  "একুশ", "বাইশ", "তেইশ", "চব্বিশ", "পঁনচিশ", "ছব্বিশ", "সাতাশ", "আটাশ", "ঊনত্রিশ", "ত্রিশ", 
+                                  "একত্রিশ", "বত্রিশ", "তেত্রিশ", "চৌঁত্রিশ", "পঁয়ত্রিশ", "ছত্রিশ", "সাঁইত্রিশ", "আটত্রিশ", "ঊনচল্লিশ", "চল্লিশ", 
+                                  "একচল্লিশ", "বিয়াল্লিশ", "তেতাল্লিশ", "চৌয়াল্লিশ", "পঁয়তাল্লিশ", "ছেচল্লিশ", "সাতচল্লিশ", "আটচল্লিশ", "ঊনপঞ্চাশ", "পঞ্চাশ", 
+                                  "একান্ন", "বায়ান্ন", "তিরপ্পান্ন", "চুয়ান্ন", "পঞ্চান্ন", "ছাপ্পান্ন", "সাতান্ন", "আটান্ন", "ঊনষাট", "ষাট", 
+                                  "একষট্টি", "বাষট্টি", "তেষট্টি", "চৌষট্টি", "পঁয়ষট্টি", "ছেষট্টি", "সাতষট্টি", "আটষট্টি", "ঊনসত্তর", "সত্তর", 
+                                  "একাত্তর", "বাহাত্তর", "তিয়াত্তর", "চৌহাত্তর", "পঁচাত্তর", "ছেয়াত্তর", "সাতাত্তর", "আটাত্তর", "ঊনআশি", "আশি", 
+                                  "একাশি", "বিরাশি", "তিরাশি", "চৌরাশি", "পঁনচাশী", "ছেঁড়াশি", "সাতাসি", "আটাসি", "ঊননব্বই", "নব্বই", 
+                                  "একানব্বই", "বানব্বই", "তিরানব্বই", "চুরানব্বই", "পঁচানব্বই", "ছেয়ানব্বই", "সাতানব্বই", "আটানব্বই", "নিরানব্বই"];
+
+            let result = "";
+
+            if (amount >= 10000000) {
+                let crore = Math.floor(amount / 10000000);
+                result += convertToBanglaWords(crore) + " কোটি ";
+                amount %= 10000000;
+            }
+            if (amount >= 100000) {
+                let lakh = Math.floor(amount / 100000);
+                if (lakh > 0) result += (lakh < 10 ? singleDigits[lakh] : teensAndTens[lakh - 10]) + " লাখ ";
+                amount %= 100000;
+            }
+            if (amount >= 1000) {
+                let thousand = Math.floor(amount / 1000);
+                if (thousand > 0) result += (thousand < 10 ? singleDigits[thousand] : teensAndTens[thousand - 10]) + " হাজার ";
+                amount %= 1000;
+            }
+            if (amount >= 100) {
+                let hundred = Math.floor(amount / 100);
+                if (hundred > 0) result += singleDigits[hundred] + " শত ";
+                amount %= 100;
+            }
+            if (amount > 0) {
+                if (amount < 10) result += singleDigits[amount];
+                else result += teensAndTens[amount - 10];
+            }
+
+            return result.trim().replace(/\s+/g, ' ');
+        }
+
+        function calculateIntelligentSummary(expensesArray) {
+            let summaryMap = {};
+            state.sectors.forEach(s => summaryMap[s] = 0);
+            if (!summaryMap["যাতায়াত"]) summaryMap["যাতায়াত"] = 0;
+
+            expensesArray.forEach(item => {
+                const sName = item.sector.trim();
+                const tCost = parseFloat(item.travel) || 0;
+                const mCost = parseFloat(item.main) || 0;
+
+                if (sName === "যাতায়াত") {
+                    summaryMap["যাতায়াত"] += (mCost + tCost);
+                } else {
+                    if (!summaryMap[sName]) summaryMap[sName] = 0;
+                    summaryMap[sName] += mCost;
+                    summaryMap["যাতায়াত"] += tCost;
+                }
+            });
+            return summaryMap;
+        }
+
+        function buildSectorSummaryBreakdown(expensesArray) {
+            const summaryMap = calculateIntelligentSummary(expensesArray);
+            const summaryTbody = document.getElementById('print-summary-body');
+            summaryTbody.innerHTML = '';
+
+            for (let secName in summaryMap) {
+                if(summaryMap[secName] > 0) {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `<td class="border border-black px-2 py-0.5 text-left">${secName}</td><td class="border border-black px-2 py-0.5 font-bold">${convertToBanglaNumber(summaryMap[secName])}/-</td>`;
+                    summaryTbody.appendChild(row);
+                }
+            }
+        }
+
+        function renderPrintEngine(expensesArray, customSubmitDate) {
+            document.getElementById('p-top-dept').innerText = state.profile.dept || '..........';
+            document.getElementById('p-creator-profile').innerHTML = formatOfficialDesignation(state.profile.creator);
+            document.getElementById('p-recommender-profile').innerHTML = formatOfficialDesignation(state.profile.recommender);
+
+            document.getElementById('p-submit-date').innerText = convertToBanglaDate(customSubmitDate);
+            document.getElementById('p-start-date').innerText = convertToBanglaDate(expensesArray[0].date || formatDate(expensesArray[0].rawDate));
+            document.getElementById('p-end-date').innerText = convertToBanglaDate(expensesArray[expensesArray.length - 1].date || formatDate(expensesArray[expensesArray.length - 1].rawDate));
+
+            buildSectorSummaryBreakdown(expensesArray);
+
+            const tbody = document.getElementById('print-table-body');
+            tbody.innerHTML = '';
+            let totalTravel = 0, totalMain = 0, grandTotal = 0;
+
+            expensesArray.forEach((item, idx) => {
+                totalTravel += item.travel; totalMain += item.main; grandTotal += item.total;
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="border border-black p-1 text-center">${convertToBanglaNumber(idx + 1)}</td>
+                    <td class="border border-black p-1 text-center">${convertToBanglaDate(item.rawDate ? formatDate(item.rawDate) : item.date)}</td>
+                    <td class="border border-black p-1 pl-3 pr-2 break-words text-left">${item.desc}</td>
+                    <td class="border border-black p-1 text-center">${item.sector}</td>
+                    <td class="border border-black p-1 text-right">${item.travel ? convertToBanglaNumber(item.travel)+'/-' : '-'}</td>
+                    <td class="border border-black p-1 text-right">${item.main ? convertToBanglaNumber(item.main)+'/-' : '-'}</td>
+                    <td class="border border-black p-1 text-right font-bold">${convertToBanglaNumber(item.total)}/-</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            document.getElementById('p-total-travel').innerText = convertToBanglaNumber(totalTravel) + '/-';
+            document.getElementById('p-total-main').innerText = convertToBanglaNumber(totalMain) + '/-';
+            document.getElementById('p-grand-total').innerText = convertToBanglaNumber(grandTotal) + '/-';
+            
+            document.getElementById('p-words').innerText = convertToBanglaWords(grandTotal) + " টাকা"; 
+            window.print();
+        }
+
+        function generatePrintPreviewOnly() {
+            if(state.currentExpenses.length === 0) return alert("কোনো বিল নেই!");
+            renderPrintEngine(state.currentExpenses, formatDate(new Date()));
+        }
+
+        function reprintArchiveReport(archiveIndex) {
+            const archiveRecord = state.archive[archiveIndex];
+            renderPrintEngine(archiveRecord.vouchers, archiveRecord.submitDate);
+        }
+
+        function exportToExcel() {
+            if (state.currentExpenses.length === 0) return alert("কোনো বিল নেই!");
+
+            const summaryMap = calculateIntelligentSummary(state.currentExpenses);
+            let excelRows = [];
+
+            excelRows.push(["--- খাতওয়ারী খরচের সামারি ---"]);
+            excelRows.push(["খাতের নাম", "মোট খরচ (টাকা)"]);
+            let totalSummarySum = 0;
+            for (let sector in summaryMap) {
+                if (summaryMap[sector] > 0) {
+                    excelRows.push([sector, summaryMap[sector]]);
+                    totalSummarySum += summaryMap[sector];
+                }
+            }
+            excelRows.push(["মোট সামারি", totalSummarySum]);
+            excelRows.push([]); 
+
+            excelRows.push([`--- ${state.profile.dept || 'অফিস'} দপ্তরের বিস্তারিত খরচের তালিকা ---`]);
+            excelRows.push(["ক্রমিক", "তারিখ", "খরচের বিবরণ", "খরচের খাত", "যাতায়াত খরচ (৳)", "মূল খরচ (৳)", "মোট খরচ (৳)"]);
+
+            let totalTravel = 0, totalMain = 0, totalGrand = 0;
+            state.currentExpenses.forEach((item, index) => {
+                totalTravel += item.travel;
+                totalMain += item.main;
+                totalGrand += item.total;
+                
+                excelRows.push([
+                    index + 1,
+                    item.rawDate ? formatDate(item.rawDate) : item.date,
+                    item.desc,
+                    item.sector,
+                    item.travel,
+                    item.main,
+                    item.total
+                ]);
+            });
+
+            excelRows.push(["যোগফল", "", "", "", totalTravel, totalMain, totalGrand]);
+            excelRows.push([]);
+            excelRows.push(["কথায় (টাকায়):", convertToBanglaWords(totalGrand) + " টাকা মাত্র।"]);
+
+            const worksheet = XLSX.utils.aoa_to_sheet(excelRows);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "PettyCash Report");
+
+            const fileName = `PettyCash_Report_${formatDate(new Date()).replace(/\//g, '-')}.xlsx`;
+            XLSX.writeFile(workbook, fileName);
+        }
+
+        function finalSubmitWithPipeline() {
+            if(state.currentExpenses.length === 0) return;
+            if(!confirm("আপনি কি নিশ্চিত বিলটি অফিসে সাবমিট করতে চান? টাকা রিসিভ করার আগ পর্যন্ত এটি পেন্ডিং হিসেবে ট্র্যাকিং হবে।")) return;
+            
+            const submitDateStr = convertToBanglaDate(formatDate(new Date()));
+            let grandTotal = 0;
+            state.currentExpenses.forEach(item => grandTotal += item.total);
+
+            if(!state.archive) state.archive = [];
+
+            state.archive.unshift({
+                status: 'pending', 
+                submitDate: submitDateStr,
+                startDate: convertToBanglaDate(state.currentExpenses[0].date || formatDate(state.currentExpenses[0].rawDate)),
+                endDate: convertToBanglaDate(state.currentExpenses[state.currentExpenses.length - 1].date || formatDate(state.currentExpenses[state.currentExpenses.length - 1].rawDate)),
+                grandTotal: grandTotal,
+                vouchers: JSON.parse(JSON.stringify(state.currentExpenses)) 
+            });
+
+            state.currentExpenses = [];
+            saveToLocalStorage();
+            updateUI();
+            switchTab('archive');
+        }
+
+        function formatDate(dateInput) {
+            if(!dateInput) return '';
+            const d = new Date(dateInput);
+            return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear().toString().slice(-2)}`;
+        }
+
+        function clearAllData() {
+            if(confirm("সব ডাটা মুছে ফেলতে চান?")) {
+                localStorage.removeItem('pettyCashV6Data');
+                location.reload();
+            }
+        }
+    </script>
+</body>
+</html>
